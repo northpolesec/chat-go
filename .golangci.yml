@@ -1,0 +1,18 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - durationcheck
+    - errname
+    - exptostd
+    - misspell
+    - modernize
+    - nosprintfhostport
+    - paralleltest
+    - predeclared
+    - reassign
+    - recvcheck
+    - usetesting
+    - wastedassign
