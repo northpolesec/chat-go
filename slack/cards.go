@@ -105,6 +105,8 @@ func convertChildToBlocks(child any, state *cardRenderState) []SlackBlock {
 		return []SlackBlock{ConvertFieldsToBlock(c)}
 	case chat.LinkElement:
 		return []SlackBlock{convertLinkToBlock(c)}
+	case chat.CodeBlockElement:
+		return []SlackBlock{convertCodeBlockToBlock(c)}
 	case chat.TableElement:
 		return convertTableToBlocks(c, state)
 	case chat.ChartElement:
@@ -118,6 +120,20 @@ func convertChildToBlocks(child any, state *cardRenderState) []SlackBlock {
 		}
 		return nil
 	}
+}
+
+// convertCodeBlockToBlock emits literal text: no emoji or mrkdwn conversion, so
+// untrusted code cannot become mentions or links.
+func convertCodeBlockToBlock(element chat.CodeBlockElement) SlackBlock {
+	pre := map[string]any{
+		"type":     "rich_text_preformatted",
+		"border":   0,
+		"elements": []any{map[string]any{"type": "text", "text": element.Code}},
+	}
+	if element.Language != "" {
+		pre["language"] = element.Language
+	}
+	return SlackBlock{Type: "rich_text", Elements: []any{pre}}
 }
 
 func ConvertTextToBlock(element chat.CardTextElement) SlackBlock {

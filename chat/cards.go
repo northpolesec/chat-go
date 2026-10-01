@@ -50,6 +50,35 @@ func CardText(content string) CardTextElement {
 	return CardTextElement{Content: content, Type: "text"}
 }
 
+// CodeBlockElement is a hermey addition (not in vercel/chat). Code is untrusted:
+// adapters must render it as literal text.
+type CodeBlockElement struct {
+	Type     string
+	Code     string
+	Language string
+}
+
+func (CodeBlockElement) isCardChild() {}
+
+func CardCodeBlock(code, language string) CodeBlockElement {
+	return CodeBlockElement{Type: "code_block", Code: code, Language: language}
+}
+
+// CodeFence wraps code in a fence one backtick longer than its longest backtick run (min 3).
+func CodeFence(code, language string) string {
+	longest, run := 0, 0
+	for _, r := range code {
+		if r == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	fence := strings.Repeat("`", max(3, longest+1))
+	return fence + language + "\n" + code + "\n" + fence
+}
+
 type ImageElement struct {
 	Alt  string
 	Type string
@@ -245,6 +274,8 @@ func CardChildToFallbackText(child any) string {
 		return strings.Join(lines, "\n")
 	case ActionsElement:
 		return ""
+	case CodeBlockElement:
+		return CodeFence(ch.Code, ch.Language)
 	case TableElement:
 		return TableElementToASCII(ch.Headers, ch.Rows)
 	case ChartElement:

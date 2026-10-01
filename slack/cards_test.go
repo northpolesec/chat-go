@@ -1048,3 +1048,25 @@ func TestCardToBlockKitWithCharts(t *testing.T) {
 }
 
 var _ blocks.SlackBlock = SlackBlock{}
+
+const hostile = "{\n  \"x\": \"<!channel> <@U1> <https://x|y> ``` &\"\n}"
+
+func TestCardCodeBlockToBlockKit(t *testing.T) {
+	jsonEq(t, []any{map[string]any{"type": "rich_text", "elements": []any{map[string]any{
+		"type": "rich_text_preformatted", "border": 0, "language": "json",
+		"elements": []any{map[string]any{"type": "text", "text": hostile}}}}}},
+		CardToBlockKit(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(hostile, "json")}}))
+}
+
+func TestCardCodeBlockSlackFallbackEscapes(t *testing.T) {
+	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(hostile, "json")}})
+	must.StrNotContains(t, got, "<!channel>")
+	must.StrContains(t, got, "&lt;!channel&gt; &lt;@U1&gt; &lt;https://x|y&gt;")
+	must.StrContains(t, got, "&amp;")
+}
+
+func TestCardCodeBlockSlackFallbackEscapesInSection(t *testing.T) {
+	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{
+		chat.SectionElement{Type: "section", Children: []any{chat.CardCodeBlock("<!here>", "")}}}})
+	must.Eq(t, "```\n&lt;!here&gt;\n```", got)
+}

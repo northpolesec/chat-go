@@ -73,14 +73,16 @@ func CardToFallbackText(card chat.Card, options FallbackTextOptions) string {
 		parts = append(parts, convertText(card.Subtitle))
 	}
 	for _, child := range card.Children {
-		if text := childToFallbackText(child, convertText); text != "" {
+		if text := childToFallbackText(child, convertText, options.Platform); text != "" {
 			parts = append(parts, text)
 		}
 	}
 	return strings.Join(parts, lineBreak)
 }
 
-func childToFallbackText(child any, convertText func(string) string) string {
+var slackEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
+func childToFallbackText(child any, convertText func(string) string, platform PlatformName) string {
 	switch ch := child.(type) {
 	case chat.CardTextElement:
 		return convertText(ch.Content)
@@ -97,11 +99,17 @@ func childToFallbackText(child any, convertText func(string) string) string {
 	case chat.SectionElement:
 		var nested []string
 		for _, c := range ch.Children {
-			if text := childToFallbackText(c, convertText); text != "" {
+			if text := childToFallbackText(c, convertText, platform); text != "" {
 				nested = append(nested, text)
 			}
 		}
 		return strings.Join(nested, "\n")
+	case chat.CodeBlockElement:
+		// Slack parses <...> in message text as live mentions and links.
+		if platform == PlatformSlack {
+			ch.Code = slackEscaper.Replace(ch.Code)
+		}
+		return chat.CodeFence(ch.Code, ch.Language)
 	case chat.TableElement:
 		return chat.TableElementToASCII(ch.Headers, ch.Rows)
 	case chat.DividerElement:
