@@ -80,6 +80,10 @@ func CardToFallbackText(card chat.Card, options FallbackTextOptions) string {
 	return strings.Join(parts, lineBreak)
 }
 
+// maxSlackFallbackCodeRunes caps code in Slack fallback text: top-level text is
+// notification/screen-reader fallback, and chat.update rejects long text with msg_too_long.
+const maxSlackFallbackCodeRunes = 1000
+
 var slackEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
 func childToFallbackText(child any, convertText func(string) string, platform PlatformName) string {
@@ -107,7 +111,15 @@ func childToFallbackText(child any, convertText func(string) string, platform Pl
 	case chat.CodeBlockElement:
 		// Slack parses <...> in message text as live mentions and links.
 		if platform == PlatformSlack {
+			// Clip before escaping so entities are never split.
+			clipped := false
+			if r := []rune(ch.Code); len(r) > maxSlackFallbackCodeRunes {
+				ch.Code, clipped = string(r[:maxSlackFallbackCodeRunes]), true
+			}
 			ch.Code = slackEscaper.Replace(ch.Code)
+			if clipped {
+				ch.Code += "…"
+			}
 		}
 		return chat.CodeFence(ch.Code, ch.Language)
 	case chat.TableElement:
