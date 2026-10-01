@@ -76,6 +76,10 @@ func CodeFence(code, language string) string {
 		}
 	}
 	fence := strings.Repeat("`", max(3, longest+1))
+	// A backtick or line break in the info string would end or split the fence.
+	if strings.ContainsAny(language, "`\r\n") {
+		language = ""
+	}
 	return fence + language + "\n" + code + "\n" + fence
 }
 
