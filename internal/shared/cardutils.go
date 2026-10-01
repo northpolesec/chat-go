@@ -5,6 +5,7 @@ package shared
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/northpolesec/chat-go/chat"
 )
@@ -80,11 +81,26 @@ func CardToFallbackText(card chat.Card, options FallbackTextOptions) string {
 	return strings.Join(parts, lineBreak)
 }
 
-// maxSlackFallbackCodeRunes caps code in Slack fallback text: top-level text is
+// maxSlackFallbackCodeRunes caps escaped code in Slack fallback text: top-level text is
 // notification/screen-reader fallback, and chat.update rejects long text with msg_too_long.
 const maxSlackFallbackCodeRunes = 1000
 
 var slackEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
+// slackFallbackCode escapes code for Slack text and cuts it, after escaping,
+// at maxSlackFallbackCodeRunes runes on a whole rune or entity, adding "…".
+func slackFallbackCode(code string) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range code {
+		piece := slackEscaper.Replace(string(r))
+		if n += utf8.RuneCountInString(piece); n > maxSlackFallbackCodeRunes {
+			return b.String() + "…"
+		}
+		b.WriteString(piece)
+	}
+	return b.String()
+}
 
 func childToFallbackText(child any, convertText func(string) string, platform PlatformName) string {
 	switch ch := child.(type) {
@@ -111,15 +127,7 @@ func childToFallbackText(child any, convertText func(string) string, platform Pl
 	case chat.CodeBlockElement:
 		// Slack parses <...> in message text as live mentions and links.
 		if platform == PlatformSlack {
-			// Clip before escaping so entities are never split.
-			clipped := false
-			if r := []rune(ch.Code); len(r) > maxSlackFallbackCodeRunes {
-				ch.Code, clipped = string(r[:maxSlackFallbackCodeRunes]), true
-			}
-			ch.Code = slackEscaper.Replace(ch.Code)
-			if clipped {
-				ch.Code += "…"
-			}
+			ch.Code = slackFallbackCode(ch.Code)
 		}
 		return chat.CodeFence(ch.Code, ch.Language)
 	case chat.TableElement:

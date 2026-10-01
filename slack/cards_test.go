@@ -1097,3 +1097,10 @@ func TestCardCodeBlockSlackFallbackShortCodeUnclipped(t *testing.T) {
 	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(code, "")}})
 	must.Eq(t, "```\n"+code+"\n```", got)
 }
+
+func TestCardCodeBlockSlackFallbackBoundsEscapedCode(t *testing.T) {
+	t.Parallel()
+	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(strings.Repeat("&", 1000), "")}})
+	must.LessEq(t, 1200, utf8.RuneCountInString(got))
+	must.StrHasSuffix(t, "&amp;…\n```", got)
+}
