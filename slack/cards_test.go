@@ -1048,3 +1048,59 @@ func TestCardToBlockKitWithCharts(t *testing.T) {
 }
 
 var _ blocks.SlackBlock = SlackBlock{}
+
+const hostile = "{\n  \"x\": \"<!channel> <@U1> <https://x|y> ``` &\"\n}"
+
+func TestCardCodeBlockToBlockKit(t *testing.T) {
+	t.Parallel()
+	jsonEq(t, []any{map[string]any{"type": "rich_text", "elements": []any{map[string]any{
+		"type": "rich_text_preformatted", "border": 0, "language": "json",
+		"elements": []any{map[string]any{"type": "text", "text": hostile}}}}}},
+		CardToBlockKit(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(hostile, "json")}}))
+}
+
+func TestCardCodeBlockSlackFallbackEscapes(t *testing.T) {
+	t.Parallel()
+	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(hostile, "json")}})
+	must.StrNotContains(t, got, "<!channel>")
+	must.StrContains(t, got, "&lt;!channel&gt; &lt;@U1&gt; &lt;https://x|y&gt;")
+	must.StrContains(t, got, "&amp;")
+}
+
+func TestCardCodeBlockSlackFallbackEscapesInSection(t *testing.T) {
+	t.Parallel()
+	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{
+		chat.SectionElement{Type: "section", Children: []any{chat.CardCodeBlock("<!here>", "")}}}})
+	must.Eq(t, "```\n&lt;!here&gt;\n```", got)
+}
+
+func TestCardCodeBlockSlackFallbackClipsLongCode(t *testing.T) {
+	t.Parallel()
+	big := "<!channel>" + strings.Repeat("é", 12000/2)
+	card := chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(big, "json")}}
+
+	got := CardToFallbackText(card)
+	must.LessEq(t, 1200, utf8.RuneCountInString(got))
+	must.True(t, utf8.ValidString(got))
+	must.StrNotContains(t, got, "<!channel>")
+	must.StrHasPrefix(t, "```json\n&lt;!channel&gt;", got)
+	must.StrHasSuffix(t, "…\n```", got)
+
+	blockKit, err := json.Marshal(CardToBlockKit(card))
+	must.NoError(t, err)
+	must.StrContains(t, string(blockKit), strings.Repeat("é", 6000))
+}
+
+func TestCardCodeBlockSlackFallbackShortCodeUnclipped(t *testing.T) {
+	t.Parallel()
+	code := strings.Repeat("x", 1000)
+	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(code, "")}})
+	must.Eq(t, "```\n"+code+"\n```", got)
+}
+
+func TestCardCodeBlockSlackFallbackBoundsEscapedCode(t *testing.T) {
+	t.Parallel()
+	got := CardToFallbackText(chat.Card{Type: "card", Children: []any{chat.CardCodeBlock(strings.Repeat("&", 1000), "")}})
+	must.LessEq(t, 1200, utf8.RuneCountInString(got))
+	must.StrHasSuffix(t, "&amp;…\n```", got)
+}

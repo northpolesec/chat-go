@@ -244,3 +244,9 @@ func TestCardToMarkdownWithCardLink(t *testing.T) {
 		must.Eq(t, "[Click here](https://example.com)", CardToMarkdown(card))
 	})
 }
+
+func TestCardToMarkdownCodeBlock(t *testing.T) {
+	t.Parallel()
+	card := chat.Card{Type: "card", Children: []any{chat.CardCodeBlock("{}", "")}}
+	must.Eq(t, "```\n{}\n```", CardToMarkdown(card))
+}

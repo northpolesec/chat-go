@@ -533,3 +533,11 @@ func TestSelectAndRadioSelectBuilderValidation(t *testing.T) {
 		})
 	})
 }
+
+func TestCardCodeBlockFallbackFence(t *testing.T) {
+	t.Parallel()
+	must.Eq(t, "```json\n{}\n```", CardChildToFallbackText(CardCodeBlock("{}", "json")))
+	must.Eq(t, "````\na ``` b\n````", CardChildToFallbackText(CardCodeBlock("a ``` b", "")))
+	must.Eq(t, "```\n{}\n```", CardChildToFallbackText(CardCodeBlock("{}", "js\n# x")))
+	must.Eq(t, "```\n{}\n```", CardChildToFallbackText(CardCodeBlock("{}", "js```")))
+}

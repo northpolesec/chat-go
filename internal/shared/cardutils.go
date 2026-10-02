@@ -5,6 +5,7 @@ package shared
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/northpolesec/chat-go/chat"
 )
@@ -73,14 +74,35 @@ func CardToFallbackText(card chat.Card, options FallbackTextOptions) string {
 		parts = append(parts, convertText(card.Subtitle))
 	}
 	for _, child := range card.Children {
-		if text := childToFallbackText(child, convertText); text != "" {
+		if text := childToFallbackText(child, convertText, options.Platform); text != "" {
 			parts = append(parts, text)
 		}
 	}
 	return strings.Join(parts, lineBreak)
 }
 
-func childToFallbackText(child any, convertText func(string) string) string {
+// maxSlackFallbackCodeRunes caps escaped code in Slack fallback text: top-level text is
+// notification/screen-reader fallback, and chat.update rejects long text with msg_too_long.
+const maxSlackFallbackCodeRunes = 1000
+
+var slackEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
+// slackFallbackCode escapes code for Slack text and cuts it, after escaping,
+// at maxSlackFallbackCodeRunes runes on a whole rune or entity, adding "…".
+func slackFallbackCode(code string) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range code {
+		piece := slackEscaper.Replace(string(r))
+		if n += utf8.RuneCountInString(piece); n > maxSlackFallbackCodeRunes {
+			return b.String() + "…"
+		}
+		b.WriteString(piece)
+	}
+	return b.String()
+}
+
+func childToFallbackText(child any, convertText func(string) string, platform PlatformName) string {
 	switch ch := child.(type) {
 	case chat.CardTextElement:
 		return convertText(ch.Content)
@@ -97,11 +119,17 @@ func childToFallbackText(child any, convertText func(string) string) string {
 	case chat.SectionElement:
 		var nested []string
 		for _, c := range ch.Children {
-			if text := childToFallbackText(c, convertText); text != "" {
+			if text := childToFallbackText(c, convertText, platform); text != "" {
 				nested = append(nested, text)
 			}
 		}
 		return strings.Join(nested, "\n")
+	case chat.CodeBlockElement:
+		// Slack parses <...> in message text as live mentions and links.
+		if platform == PlatformSlack {
+			ch.Code = slackFallbackCode(ch.Code)
+		}
+		return chat.CodeFence(ch.Code, ch.Language)
 	case chat.TableElement:
 		return chat.TableElementToASCII(ch.Headers, ch.Rows)
 	case chat.DividerElement:
