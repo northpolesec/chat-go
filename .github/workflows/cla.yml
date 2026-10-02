@@ -20,8 +20,10 @@ jobs:
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # The action records a signature only from the comment that triggered the run, so comment
+    # runs get their own group; canceling one would drop that signature.
     concurrency:
-      group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
+      group: cla-${{ github.event_name == 'issue_comment' && github.run_id || github.event.pull_request.number }}
       cancel-in-progress: true
     permissions:
       pull-requests: write   # post/update the CLA comment
