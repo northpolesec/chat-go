@@ -191,6 +191,11 @@ type UserInfo struct {
 	Tz        string
 	UserID    string
 	UserName  string
+	// Workspace membership from Slack users.info; zero on other platforms.
+	TeamID            string
+	IsRestricted      bool // multi-channel guest
+	IsUltraRestricted bool // single-channel guest
+	Deleted           bool
 }
 
 // AdapterPostableMessage is what adapters accept for post/edit.

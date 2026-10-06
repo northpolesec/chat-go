@@ -17,7 +17,9 @@ import (
 )
 
 const (
-	userCacheTTL      = 8 * 24 * time.Hour
+	// Callers vouch for identity (email, workspace, guest status) from this
+	// cache, so it holds an hour, not upstream's 8 days.
+	userCacheTTL      = time.Hour
 	channelCacheTTL   = 8 * 24 * time.Hour
 	reverseIndexTTL   = 8 * 24 * time.Hour
 	reverseIndexMax   = 50
@@ -53,8 +55,14 @@ func (a *SlackAdapter) state() chat.StateAdapter {
 	return a.chat.State()
 }
 
+// userCacheKey is v2 since entries gained the membership fields; v1 entries
+// lack them and are never read.
+func (a *SlackAdapter) userCacheKey(ctx context.Context, userID string) string {
+	return "slack:user:v2:" + a.installationCacheScope(ctx) + userID
+}
+
 func (a *SlackAdapter) lookupUser(ctx context.Context, userID string) *userInfo {
-	cacheKey := "slack:user:" + a.installationCacheScope(ctx) + userID
+	cacheKey := a.userCacheKey(ctx, userID)
 	if st := a.state(); st != nil {
 		if cached, ok, err := chat.StateGet[userInfo](ctx, st, cacheKey); err == nil && ok {
 			return &cached
@@ -75,11 +83,15 @@ func (a *SlackAdapter) lookupUser(ctx context.Context, userID string) *userInfo 
 	}
 	var payload struct {
 		User struct {
-			IsBot    bool   `json:"is_bot"`
-			Name     string `json:"name"`
-			RealName string `json:"real_name"`
-			Tz       string `json:"tz"`
-			Profile  struct {
+			IsBot             bool   `json:"is_bot"`
+			TeamID            string `json:"team_id"`
+			IsRestricted      bool   `json:"is_restricted"`
+			IsUltraRestricted bool   `json:"is_ultra_restricted"`
+			Deleted           bool   `json:"deleted"`
+			Name              string `json:"name"`
+			RealName          string `json:"real_name"`
+			Tz                string `json:"tz"`
+			Profile           struct {
 				DisplayName string `json:"display_name"`
 				Email       string `json:"email"`
 				Image192    string `json:"image_192"`
@@ -100,12 +112,16 @@ func (a *SlackAdapter) lookupUser(ctx context.Context, userID string) *userInfo 
 	)
 	realName := firstOf(payload.User.RealName, payload.User.Profile.RealName, display)
 	info := userInfo{
-		AvatarURL:   payload.User.Profile.Image192,
-		DisplayName: display,
-		Email:       payload.User.Profile.Email,
-		IsBot:       payload.User.IsBot,
-		RealName:    realName,
-		Tz:          payload.User.Tz,
+		AvatarURL:         payload.User.Profile.Image192,
+		DisplayName:       display,
+		Email:             payload.User.Profile.Email,
+		IsBot:             payload.User.IsBot,
+		RealName:          realName,
+		Tz:                payload.User.Tz,
+		TeamID:            payload.User.TeamID,
+		IsRestricted:      payload.User.IsRestricted,
+		IsUltraRestricted: payload.User.IsUltraRestricted,
+		Deleted:           payload.User.Deleted,
 	}
 	a.userCacheMu.Lock()
 	a.userCache[userID] = info
@@ -165,13 +181,17 @@ func (a *SlackAdapter) GetUser(ctx context.Context, userID string) *UserInfo {
 		return nil
 	}
 	return &UserInfo{
-		AvatarURL: cached.AvatarURL,
-		Email:     cached.Email,
-		FullName:  cached.RealName,
-		IsBot:     cached.IsBot,
-		Tz:        cached.Tz,
-		UserID:    userID,
-		UserName:  cached.DisplayName,
+		AvatarURL:         cached.AvatarURL,
+		Email:             cached.Email,
+		FullName:          cached.RealName,
+		IsBot:             cached.IsBot,
+		Tz:                cached.Tz,
+		UserID:            userID,
+		UserName:          cached.DisplayName,
+		TeamID:            cached.TeamID,
+		IsRestricted:      cached.IsRestricted,
+		IsUltraRestricted: cached.IsUltraRestricted,
+		Deleted:           cached.Deleted,
 	}
 }
 

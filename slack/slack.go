@@ -177,6 +177,7 @@ type SlackAdapter struct {
 
 	botUserID string
 	botID     string
+	teamID    string
 
 	chat chat.ChatInstance
 
@@ -237,12 +238,16 @@ func requestContextFrom(ctx context.Context) *requestContext {
 }
 
 type userInfo struct {
-	AvatarURL   string `json:"avatarUrl,omitempty"`
-	DisplayName string `json:"displayName"`
-	Email       string `json:"email,omitempty"`
-	IsBot       bool   `json:"isBot,omitempty"`
-	RealName    string `json:"realName"`
-	Tz          string `json:"tz,omitempty"`
+	AvatarURL         string `json:"avatarUrl,omitempty"`
+	DisplayName       string `json:"displayName"`
+	Email             string `json:"email,omitempty"`
+	IsBot             bool   `json:"isBot,omitempty"`
+	RealName          string `json:"realName"`
+	Tz                string `json:"tz,omitempty"`
+	TeamID            string `json:"teamId,omitempty"`
+	IsRestricted      bool   `json:"isRestricted,omitempty"`
+	IsUltraRestricted bool   `json:"isUltraRestricted,omitempty"`
+	Deleted           bool   `json:"deleted,omitempty"`
 }
 
 // New constructs a SlackAdapter (upstream constructor / createSlackAdapter).
@@ -381,6 +386,14 @@ func (a *SlackAdapter) BotUserID() string {
 	return a.botUserID
 }
 
+// TeamID is the bot's workspace from auth.test; "" until it succeeds or in
+// multi-workspace mode.
+func (a *SlackAdapter) TeamID() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.teamID
+}
+
 func (a *SlackAdapter) botUserIDFrom(ctx context.Context) string {
 	if rc := requestContextFrom(ctx); rc != nil && rc.botUserID != "" {
 		return rc.botUserID
@@ -431,6 +444,7 @@ func (a *SlackAdapter) Initialize(ctx context.Context, instance chat.ChatInstanc
 	}
 	var payload struct {
 		BotID  string `json:"bot_id"`
+		TeamID string `json:"team_id"`
 		User   string `json:"user"`
 		UserID string `json:"user_id"`
 	}
@@ -441,6 +455,7 @@ func (a *SlackAdapter) Initialize(ctx context.Context, instance chat.ChatInstanc
 	a.mu.Lock()
 	a.botUserID = payload.UserID
 	a.botID = payload.BotID
+	a.teamID = payload.TeamID
 	if payload.User != "" {
 		a.userName = payload.User
 	}

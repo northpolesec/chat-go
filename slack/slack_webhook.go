@@ -1095,7 +1095,7 @@ func (a *SlackAdapter) handleUserChange(ctx context.Context, raw map[string]any)
 	if st == nil {
 		return
 	}
-	if err := st.Delete(ctx, "slack:user:"+a.installationCacheScope(ctx)+userID); err != nil {
+	if err := st.Delete(ctx, a.userCacheKey(ctx, userID)); err != nil {
 		a.logger.Warn("Failed to invalidate user cache", "userId", userID, "error", err)
 	}
 }
