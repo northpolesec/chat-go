@@ -196,13 +196,14 @@ func TestInitialize(t *testing.T) {
 		t.Parallel()
 		apiMock := newSlackAPIMock(t)
 		apiMock.ok("auth.test", map[string]any{
-			"user_id": "U_INITIALIZED_BOT", "bot_id": "B_INITIALIZED_BOT", "user": "testbot",
+			"user_id": "U_INITIALIZED_BOT", "bot_id": "B_INITIALIZED_BOT", "user": "testbot", "team_id": "T_NPS",
 		})
 		adapter := apiMock.adapter(t, Config{})
 		sc, _ := newStateChat(t)
 		must.NoError(t, adapter.Initialize(t.Context(), sc))
 		must.Eq(t, "U_INITIALIZED_BOT", adapter.BotUserID())
 		must.Eq(t, "testbot", adapter.UserName())
+		must.Eq(t, "T_NPS", adapter.TeamID())
 	})
 
 	t.Run("handles auth.test failure gracefully", func(t *testing.T) {
@@ -212,6 +213,7 @@ func TestInitialize(t *testing.T) {
 		adapter := apiMock.adapter(t, Config{})
 		sc, _ := newStateChat(t)
 		must.NoError(t, adapter.Initialize(t.Context(), sc))
+		must.Eq(t, "", adapter.TeamID())
 	})
 
 	t.Run("skips auth.test in multi-workspace mode", func(t *testing.T) {

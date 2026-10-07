@@ -1571,7 +1571,7 @@ func TestReverseUserLookupUserChangeEvent(t *testing.T) {
 	adapter := webhookAdapter(t, Config{})
 	mc := newMockChat(t)
 	must.NoError(t, adapter.Initialize(t.Context(), mc))
-	must.NoError(t, chat.StateSet(t.Context(), mc.state, "slack:user:U_DOM_123",
+	must.NoError(t, chat.StateSet(t.Context(), mc.state, "slack:user:v2:U_DOM_123",
 		userInfo{DisplayName: "dominik", RealName: "Dominik G"}, 8*24*time.Hour))
 	resp := postJSON(t, adapter, webhookSecret, eventJSON(map[string]any{
 		"type": "user_change", "event_ts": "1234567890.123456",
@@ -1582,7 +1582,7 @@ func TestReverseUserLookupUserChangeEvent(t *testing.T) {
 	}))
 	must.Eq(t, 200, resp.status)
 	mustWait(t, adapter)
-	raw, err := mc.state.Get(t.Context(), "slack:user:U_DOM_123")
+	raw, err := mc.state.Get(t.Context(), "slack:user:v2:U_DOM_123")
 	must.NoError(t, err)
 	must.Eq(t, 0, len(raw))
 }

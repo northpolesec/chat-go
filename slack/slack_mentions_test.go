@@ -5,8 +5,12 @@
 package slack
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/northpolesec/chat-go/chat"
 	"github.com/northpolesec/chat-go/slack/api"
@@ -616,6 +620,52 @@ func TestGetUser(t *testing.T) {
 		must.Eq(t, "America/Denver", user.Tz)
 	})
 
+	t.Run("returns workspace membership fields", func(t *testing.T) {
+		t.Parallel()
+		apiMock := newSlackAPIMock(t)
+		apiMock.ok("users.info", map[string]any{"user": map[string]any{
+			"name": "g", "team_id": "T_NPS", "is_restricted": true, "is_ultra_restricted": true, "deleted": true,
+			"profile": map[string]any{"email": "g@example.com"},
+		}})
+		adapter := apiMock.adapter(t, Config{})
+		sc, _ := newStateChat(t)
+		must.NoError(t, adapter.Initialize(t.Context(), sc))
+		user := adapter.GetUser(t.Context(), "U1")
+		must.NotNil(t, user)
+		must.Eq(t, "T_NPS", user.TeamID)
+		must.True(t, user.IsRestricted)
+		must.True(t, user.IsUltraRestricted)
+		must.True(t, user.Deleted)
+	})
+
+	t.Run("ignores a pre-v2 cache entry", func(t *testing.T) {
+		t.Parallel()
+		apiMock := newSlackAPIMock(t)
+		apiMock.ok("users.info", map[string]any{"user": map[string]any{"name": "a", "team_id": "T_NPS"}})
+		adapter := apiMock.adapter(t, Config{})
+		sc, st := newStateChat(t)
+		must.NoError(t, adapter.Initialize(t.Context(), sc))
+		must.NoError(t, chat.StateSet(t.Context(), st, "slack:user:U1", userInfo{DisplayName: "stale"}, time.Hour))
+		user := adapter.GetUser(t.Context(), "U1")
+		must.NotNil(t, user)
+		must.Eq(t, "T_NPS", user.TeamID)
+		must.Eq(t, 1, apiMock.count("users.info"))
+	})
+
+	t.Run("caches a user for one hour", func(t *testing.T) {
+		t.Parallel()
+		apiMock := newSlackAPIMock(t)
+		apiMock.ok("users.info", map[string]any{"user": map[string]any{"name": "a", "team_id": "T_NPS"}})
+		adapter := apiMock.adapter(t, Config{})
+		_, st := newStateChat(t)
+		rec := &ttlState{StateAdapter: st, ttls: map[string]time.Duration{}}
+		must.NoError(t, adapter.Initialize(t.Context(), stateChat{state: rec}))
+		must.NotNil(t, adapter.GetUser(t.Context(), "U1"))
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		must.Eq(t, time.Hour, rec.ttls["slack:user:v2:U1"])
+	})
+
 	t.Run("should return null when API fails", func(t *testing.T) {
 		t.Parallel()
 		apiMock := newSlackAPIMock(t)
@@ -696,7 +746,7 @@ func TestGetUser(t *testing.T) {
 		adapter := apiMock.adapter(t, Config{})
 		sc, st := newStateChat(t)
 		must.NoError(t, adapter.Initialize(t.Context(), sc))
-		must.NoError(t, chat.StateSet(t.Context(), st, "slack:user:U_CACHED", userInfo{
+		must.NoError(t, chat.StateSet(t.Context(), st, "slack:user:v2:U_CACHED", userInfo{
 			AvatarURL: "https://example.com/cached.png", DisplayName: "Cached User",
 			Email: "cached@example.com", IsBot: false, RealName: "Cached User Full",
 		}, 0))
@@ -750,4 +800,18 @@ func adapterWithState(t *testing.T) (*SlackAdapter, chat.StateAdapter) {
 	sc, st := newStateChat(t)
 	adapter.chat = sc
 	return adapter, st
+}
+
+// ttlState records the TTL of every Set.
+type ttlState struct {
+	chat.StateAdapter
+	mu   sync.Mutex
+	ttls map[string]time.Duration
+}
+
+func (s *ttlState) Set(ctx context.Context, key string, value json.RawMessage, ttl time.Duration) error {
+	s.mu.Lock()
+	s.ttls[key] = ttl
+	s.mu.Unlock()
+	return s.StateAdapter.Set(ctx, key, value, ttl)
 }
