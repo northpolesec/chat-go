@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	// Callers vouch for identity (email, workspace, guest status) from this
-	// cache, so it holds an hour, not upstream's 8 days.
+	// Callers vouch for identity (email, workspace, guest status) from the
+	// state cache, so it holds an hour, not upstream's 8 days. The in-memory
+	// fallback (no state adapter) has no TTL.
 	userCacheTTL      = time.Hour
 	channelCacheTTL   = 8 * 24 * time.Hour
 	reverseIndexTTL   = 8 * 24 * time.Hour
