@@ -386,8 +386,8 @@ func (a *SlackAdapter) BotUserID() string {
 	return a.botUserID
 }
 
-// TeamID is the bot's workspace from auth.test; "" until it succeeds or in
-// multi-workspace mode.
+// TeamID is the bot's workspace from auth.test. It is "" when auth.test
+// failed or never ran: multi-workspace mode, or Config.BotUserID was set.
 func (a *SlackAdapter) TeamID() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
